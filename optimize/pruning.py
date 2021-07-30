@@ -80,8 +80,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='resnet18')
     parser.add_argument('--img-size', type=list, default=[224, 224])
-    parser.add_argument('--method', type=str, default='l1')
-    parser.add_argument('--amount', type=float, default=0.3)
+    parser.add_argument('--method', type=str, default='l1', help='pruning method `l1` or `random`')
+    parser.add_argument('--amount', type=float, default=0.3, help='removing connections percentage 0 to 1')
     parser.add_argument('--save-dir', type=str, default='output')
     args = parser.parse_args()
 
