@@ -1,70 +1,67 @@
-import torch
-import torch.onnx
 import argparse
-import onnx
-import shutil
-import os
 import tensorflow as tf
-from pathlib import Path
-from onnxsim import simplify
-from onnx_tf.backend import prepare
-from torchvision import models
+import numpy as np
 
 
-
-def main(args):
-    save_path = Path(args.output).parent
-    save_path.mkdir(exist_ok=True)
-    tflite_model_path = args.output
-    onnx_model_path = args.output.replace('.tflite', '_temp.onnx')
-    tf_model_path = Path(args.output.split('.')[0])
-    if tf_model_path.exists(): shutil.rmtree(tf_model_path)
-    
-    model = models.__dict__[args.model]()
-    model.eval()
-
-    inputs = torch.randn(1, 3, *args.img_size)
-
-    torch.onnx.export(
-        model, 
-        inputs, 
-        onnx_model_path,
-        input_names=['input'],
-        output_names=['output'],
-        opset_version=13
-    )
-
-    onnx_model = onnx.load(onnx_model_path)
-    onnx.checker.check_model(onnx_model)
-
-    onnx_model, check = simplify(onnx_model)
-    assert check, "Simplified ONNX model could not be validated"
-
-    tf_rep = prepare(onnx_model)
-    tf_rep.export_graph(str(tf_model_path))
-
-    converter = tf.lite.TFLiteConverter.from_saved_model(str(tf_model_path))
+def to_float32(converter):
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,
         tf.lite.OpsSet.SELECT_TF_OPS
     ]
+    return converter
+
+
+def to_float16(converter):
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_types = [tf.float16]
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.TFLITE_BUILTINS,
+        tf.lite.OpsSet.SELECT_TF_OPS
+    ]
+    return converter
+
+
+def to_int8(converter, dataset_path):
+    calibrate_data = np.load(dataset_path, allow_pickle=True)
+
+    def representative_dataset_gen():
+        for image in calibrate_data:
+            image = image[None, ...]
+            yield [image]
+
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.TFLITE_BUILTINS_INT8
+    ]
+    converter.inference_input_type = tf.int8
+    converter.inference_input_type = tf.int8
+    converter.representative_dataset = representative_dataset_gen
+    return converter
+
+
+def main(model_path, model_output_path, quant_type, dataset_path):    
+    converter = tf.lite.TFLiteConverter.from_saved_model(model_path)
+    
+    if quant_type == 'float16':
+        converter = to_float16(converter)
+    elif quant_type == 'int8':
+        assert dataset_path
+        converter = to_int8(converter, dataset_path)
+    else:
+        converter = to_float32(converter)
+
     tflite_model = converter.convert()
 
-    with open(str(tflite_model_path), 'wb') as f:
+    with open(model_output_path, 'wb') as f:
         f.write(tflite_model)
-
-    shutil.rmtree(tf_model_path)
-    os.remove(onnx_model_path)
-    
-    print(f"Finished converting and Saved model at {tflite_model_path}")
-
+    print(f"Finished converting and Saved model.")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='resnet18')
-    parser.add_argument('--img-size', type=list, default=[224, 224])
-    parser.add_argument('--output', type=str, default='output/resnet18.tflite')
+    parser.add_argument('--model-path', type=str, default='resnet18')
+    parser.add_argument('--model-output-path', type=str, default='resnet18.tflite')
+    parser.add_argument('--quant', type=str, default='float32')
+    parser.add_argument('--dataset-path', type=str, default='')
     args = parser.parse_args()
-
-    main(args)
+    main(args.model_path, args.model_output_path, args.quant, args.dataset_path)

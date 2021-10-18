@@ -1,10 +1,5 @@
 # Optimize PyTorch Models
 
-* [Introduction](#introduction)
-* [Installation](#installation)
-* [Features](#features)
-* [Benchmarks](#benchmarks)
-
 ## Introduction
 
 This project is for optimizing pytorch models for production. Optimization includes the following:
@@ -15,33 +10,116 @@ This project is for optimizing pytorch models for production. Optimization inclu
 
 ## Installation
 
-Coming Soon...
+### Installing OpenVINO
 
+**Download OpenVINO toolkit** from [here](https://software.intel.com/en-us/openvino-toolkit/choose-download).
 
-## Features
+On Linux:
 
-* Conversion
-    * [PyTorch to ONNX](./convert/to_onnx.py)
-    * [PyTorch to TFLite](./convert/to_tflite.py)
-    * [PyTorch to TensorRT]() (Coming Soon)
+```bash
+$ tar -xvzf l_openvino_toolkit_p_<version>.tgz
+$ cd l_openvino_toolkit_p_<version>
+$ sudo ./install.sh
+```
 
-* Inference
-    * [PyTorch](./inference/pt_infer.py)
-    * [ONNX](./inference/onnx_infer.py)
-    * [TFLite](./inference/tflite_infer.py)
-    * [TensorRT]() (Coming Soon)
+**[Optional] Install External Software Dependencies**
 
-* Quantization
-    * [PyTorch](./optimize/quantize.py)
-    * [TFLite]() (Coming Soon)
-    * [TensorRT]() (Coming Soon)
+These include:
+* Intel-optimized build of OpenCV library
+* Inference Engine
+* Model Optimizer Tools
 
-* Pruning
-    * [PyTorch](./optimize/prune.py)
+On Linux:
 
-* Model Inspection
-    * [Benchmark](./inspect/benchmark_model.py)
-    * [Profiler](./inspect/profile_model.py)
+```bash
+$ cd /opt/intel/openvino_2021/install_dependencies
+$ sudo -E ./install_openvino_dependencies.sh
+```
+
+**Set the Environment Variables**
+
+* Open the `.bashrc` file.
+
+```bash
+$ gedit ~/.bashrc
+```
+
+* Add this line to the end of the file.
+
+```bash
+source /opt/intel/openvino_2021/bin/setupvars.sh
+```
+
+* Save and close the file.
+* Open a new terminal and you will see `[setupvars.sh] OpenVINO environment initialized.`
+
+**Configure the Model Optimizer**
+
+* Go to the Model Optimizer pre-requisites directory.
+
+```bash
+$ cd /opt/intel/openvino_2021/deployment_tools/model_optimizer/install_prequisites
+```
+
+* Run the script for ONNX framework.
+
+```bash
+$ sudo ./install_prequisites_onnx.sh
+```
+
+**Uninstall OpenVINO**
+
+Run the following command.
+
+```bash
+$ sudo /opt/intel/openvino_2021/openvino_toolkit_uninstaller/uninstall.sh -s
+```
+
+### Installing openvino2tensorflow
+
+[openvino2tensorflow](https://github.com/PINTO0309/openvino2tensorflow) tool will be used to convert OpenVINO model to TensorFlow model. Install as follows:
+
+```bash
+$ pip install -U git+https://github.com/PINTO0309/openvino2tensorflow
+```
+
+## PyTorch to TFLite
+
+### Step 1: Convert PyTorch to ONNX
+
+```bash
+$ python convert/to_onnx.py
+```
+
+### Step 2: Convert ONNX to OpenVINO
+
+```bash
+$ python <OpenVINO_INSTALL_DIR>/deployment_tools/model_optimizer/mo.py \
+    --input_model <MODEL>.onnx \
+    --output_dir <OpenVINO_MODEL_PATH> \
+    --input_shape [B,C,H,W] \
+    --data_type {FP16,FP32,half,float} \
+```
+
+### Step 3: Convert OpenVINO to TensorFlow
+
+```bash
+$ openvino2tensorflow \
+    --model_path <OpenVINO_MODEL_PATH>/<MODEL>.xml \
+    --model_output_path <TF_SAVED_MODEL_PATH> \
+    --output_saved_model \
+```
+
+## Step 4: Convert TensorFlow to TFLite
+
+```bash
+$ python convert/to_tflite.py \
+    --model-path <TF_SAVED_MODEL_PATH>
+    --model-output-path <TFLITE_MODEL_PATH>
+    --quant {'float32', 'float16', 'int8'}
+```
+
+> Notes: If you use int8 quantization, you need to add `--dataset-path <CALIBRATE_DATASET_PATH>` unlabelled data in numpy format.
 
 
 ## Benchmarks
